@@ -1,0 +1,92 @@
+pipeline{ 
+agent{ 
+ label{ 
+ label 'built-in' 
+ customWorkspace '/mnt/data/projects' 
+ } 
+ } 
+ 
+ stages{ 
+ 
+ stage('clone gameoflife repository'){ 
+ steps{ 
+ sh"rm -rf game-of-life" 
+ sh"git clone https://github.com/AkReposit1/game-of-life.git" 
+ } 
+ } 
+ 
+ stage('build gameoflife.war'){ 
+ steps{ 
+ dir('/mnt/data/projects/game-of-life'){ 
+ sh"mvn clean install -DskipTests" 
+ } 
+ } 
+ } 
+ 
+ stage('deploy gameoflife.war on S3'){ 
+ steps{ 
+ dir('/mnt/data/projects/game-of-life/gameoflife-web/target'){ 
+ sh"aws s3 mb s3://bucketforgameoflife123 --region ap-south-1" 
+ sh"aws s3 cp gameoflife.war s3://bucketforgameoflife123/" 
+ //sh"aws s3 rm s3://bucketforgameoflife --recursive" 
+ //sh "aws s3 rb s3://bucketforgameoflife" 
+ } 
+ } 
+ } 
+ 
+ stage('Parallel execution on Slave1 and Slave2'){ 
+ parallel{ 
+ stage('download tomcat and gameoflife.war on Slave1'){ 
+ agent{ 
+ label{ 
+ label 'Slave1' 
+ } 
+ } 
+ steps{ 
+ sh"sudo chmod -R 777 /mnt" 
+ sh"mkdir /mnt/webserver" 
+ sh"sudo chmod -R 777 /mnt/webserver" 
+ dir('/mnt/webserver'){ 
+ sh"sudo wget https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.67/bin/apachetomcat-9.0.67.zip" 
+ sh"sudo unzip apache-tomcat-9.0.67.zip" 
+ sh"sudo rm -rf apache-tomcat-9.0.67.zip" 
+ sh"sudo chmod -R 777 apache-tomcat-9.0.67" 
+ } 
+ 
+ dir('/mnt/webserver/apache-tomcat-9.0.67/webapps/'){ 
+ sh"sudo aws s3 cp s3://bucketforgameoflife123/gameoflife.war ." 
+ } 
+ 
+ dir('/mnt/webserver/apache-tomcat-9.0.67/bin/'){ 
+ sh"sudo ./startup.sh" 
+ } 
+ } 
+ } 
+ stage('download tomcat and gameoflife.war on Slave2'){ 
+ agent{ 
+ label{ 
+ label 'Slave2' 
+ } 
+ } 
+ steps{ 
+ sh"sudo chmod -R 777 /mnt" 
+ sh"mkdir /mnt/webserver" 
+ sh"sudo chmod -R 777 /mnt/webserver" 
+ dir('/mnt/webserver'){ 
+ sh"sudo wget https://dlcdn.apache.org/tomcat/tomcat-9/v9.0.67/bin/apachetomcat-9.0.67.zip" 
+ sh"sudo unzip apache-tomcat-9.0.67.zip" 
+ sh"sudo rm -rf apache-tomcat-9.0.67.zip" 
+ sh"sudo chmod -R 777 apache-tomcat-9.0.67" 
+ } 
+ dir('/mnt/webserver/apache-tomcat-9.0.67/webapps/'){ 
+ sh"sudo aws s3 cp s3://bucketforgameoflife123/gameoflife.war ." 
+ } 
+ dir('/mnt/webserver/apache-tomcat-9.0.67/bin/'){ 
+ sh"sudo ./startup.sh" 
+ } 
+ } 
+ } 
+ } 
+ } 
+ } 
+ } 
